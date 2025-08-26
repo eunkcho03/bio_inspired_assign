@@ -2,7 +2,6 @@ import numpy as np
 import pygame as pg
 import random
 ##########################Setup Environment <3##########################
-# I am going to build a grid world environment with traps, portals, and sliding blocks and also decoys. The agent will start at a given position and must reach the goal while avoiding traps and sliding blocks. The agent can also use portals to teleport to other locations in the grid. The agent will receive a reward for reaching the goal, a penalty for falling into a trap, and a small penalty for each step taken. The agent will also receive a small penalty for using a portal. The agent will also receive a small reward  for finding a decoy, but there is a probability that the decoy is fake and will result in a penalty instead. The agent will have a slip probability that will cause it to move in a random direction instead of the intended direction. The environment will be represented as a 2D grid with different symbols representing the different elements of the environment.
 
 class Environment:
     def __init__(self, cfg):
@@ -29,4 +28,7 @@ class Environment:
         
         self.start = cfg['start']
         self.goal = cfg['goal']
+        
+
+
         
