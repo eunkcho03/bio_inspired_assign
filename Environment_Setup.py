@@ -32,6 +32,8 @@ class Environment:
         W = len(sizing[0])
         return H,W 
     
+    
+    
     def ascii(self, ascii_map): # the input is string
         lines = []
         for l in ascii_map.strip().split("\n"):
@@ -59,10 +61,36 @@ class Environment:
                 elif ch.isdigit():
                     self.grid[r][c] = T_pickup
                     self.picks_all.add((r,c))
+        return self.grid, self.picks_all
                 
     def observation_tensor(self):
         layers = []
         H, W = self.size(self.grid)
+        
+        # Agent layer
+        agent_layer = np.zeros((H, W), dtype=np.float32)
+        agent_layer[self.agent_pos] = 1.0
+        layers.append(agent_layer)
+        
+        # Depot layer
+        depot_layer = np.zeros((H, W), dtype=np.float32)
+        depot_layer[self.depot_pos] = 1.0
+        layers.append(depot_layer)
+        
+        # Pickup Layer
+        pickup_layer = np.zeros((H, W), dtype=np.float32)
+        for p in self.picks_remaining:
+            pickup_layer[p] = 1.0
+        layers.append(pickup_layer)
+        
+        Tiles = [T_trap, t_slide, T_decoy, T_portal]
+        
+        for tile in Tiles:
+            tile_layer = (np.array(self.grid) == tile).astype(np.float32)
+            layers.append(tile_layer)
+        
+        observation = np.stack(layers, axis=0)
+        return observation
 
 
         
