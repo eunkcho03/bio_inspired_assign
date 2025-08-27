@@ -1,8 +1,8 @@
 # Configuration file for the warehouse environment
 env_name: warehouse
 seed: 42
-max_steps: 200
-terminate_on_trap: true
+max_steps: 1000
+terminate_on_trap: True
 
 # Grid world settings
 ascii_map: | # 7 x 13
