@@ -2,17 +2,23 @@
 env_name: warehouse
 seed: 42
 max_steps: 1000
-terminate_on_trap: True
 
 # Grid world settings
-ascii_map: | # 7 x 13
-  XXXXXXXXXXXXX 
-  XH....1.....X 
-  X..W..2.....X
-  X..P..T..P..X
-  X..3..D..4..X
-  X.....W....5X
+ascii_map: |
   XXXXXXXXXXXXX
+  XH..........X
+  X..1....W...X
+  X.....D.....X
+  X..P........X
+  X......2....X
+  X..........TX
+  X....W......X
+  X.....4.....X
+  X.......P...X
+  X...D.......X
+  X..3....5...X
+  XXXXXXXXXXXXX
+
 # X = wall, .= empty, H = home, W = slide, P = portal
 # T = trap, D = decoy, numbers = items to collect
 # portal must be in pairs!!!

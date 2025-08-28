@@ -1,6 +1,7 @@
 from __future__ import annotations
 import numpy as np
 import random
+import yaml
 
 ##########################Setup Environment <3##########################
 up, right, down, left = 0, 1, 2, 3
@@ -153,11 +154,11 @@ class Environment:
             else:
                 reward += float(d["r_bad"])
                 
-        done = False
-        if self.grid[self.agent_pos[0]][self.agent_pos[1]] == T_trap and self.cfg["terminate_on_trap"]:
+        if self.grid[self.agent_pos[0]][self.agent_pos[1]] == T_trap:
             reward += float(self.cfg["r_trap"])
-            done = True
             
+        done = False
+        
         success = (len(self.picks_remaining)==0 and self.agent_pos == self.depot_pos)
         if success:
             reward += float(self.cfg["complete_bonus"])
@@ -167,3 +168,100 @@ class Environment:
             done = True
         
         return self.observation_tensor(), reward, done, {"success": success, "teleported": teleported}
+    
+    def render_ascii(self):
+        # Characters per tile
+        chars = {
+            T_emp:'.', T_wall:'X', T_trap:'T', t_slide:'W',
+            T_decoy:'D', T_portal:'P', T_depot:'H', T_pickup:'.'
+        }
+        lines = []
+        for r in range(self.H):
+            row = []
+            for c in range(self.W):
+                ch = chars[self.grid[r][c]]
+                if (r, c) in self.picks_remaining: ch = '*'
+                if (r, c) == self.depot_pos:       ch = 'H'
+                row.append(ch)
+            lines.append(''.join(row))
+        # overlay agent
+        ar, ac = self.agent_pos
+        ln = list(lines[ar]); ln[ac] = '@'; lines[ar] = ''.join(ln)
+        print('\n'.join(lines))
+
+
+
+import pygame as pg
+
+def draw_env_pg(screen, env, scale=32):
+    colors = {
+        T_emp:(230,230,230), T_wall:(30,30,30),   T_trap:(200,60,60),
+        t_slide:(80,160,220), T_decoy:(200,120,60), T_portal:(130,70,200),
+        T_depot:(60,180,90)
+    }
+    H, W = env.H, env.W
+    for r in range(H):
+        for c in range(W):
+            tile = env.grid[r][c]
+            col = colors.get(tile, (200,200,200))
+            pg.draw.rect(screen, col, (c*scale, r*scale, scale, scale))
+            # picks overlay
+            if (r,c) in env.picks_remaining:
+                pg.draw.circle(screen, (255,215,0), (c*scale+scale//2, r*scale+scale//2), scale//5)
+    # depot marker
+    dr, dc = env.depot_pos
+    pg.draw.rect(screen, (60,180,90), (dc*scale, dr*scale, scale, scale), width=3)
+    # agent
+    ar, ac = env.agent_pos
+    pg.draw.circle(screen, (0,0,0), (ac*scale+scale//2, ar*scale+scale//2), scale//3)
+
+def visualize_episode_pg(env, policy_fn=None, fps=8, max_steps=500, scale=32):
+    """policy_fn(env, obs) -> action (0..3). If None, random actions."""
+    pg.init()
+    screen = pg.display.set_mode((env.W*scale, env.H*scale))
+    clock = pg.time.Clock()
+    obs, info = env.reset()
+    running = True
+    steps = 0
+    while running and steps < max_steps:
+        for event in pg.event.get():
+            if event.type == pg.QUIT: running = False
+
+        a = policy_fn(env, obs) if policy_fn else random.choice([0,1,2,3])
+        obs, r, done, info = env.step(a)
+
+        screen.fill((240,240,240))
+        draw_env_pg(screen, env, scale)
+        pg.display.flip()
+        clock.tick(fps)
+
+        if done:
+            # brief flash on success
+            if info.get("success"):
+                screen.fill((180,255,180)); pg.display.flip(); pg.time.delay(300)
+            obs, info = env.reset()
+        steps += 1
+    pg.quit()
+
+
+with open("config.yaml", "r") as f:
+    cfg = yaml.safe_load(f)
+    
+# Build env
+env = Environment(cfg)
+
+# 1) Reset + ASCII render
+obs, info = env.reset()
+env.render_ascii()
+
+# 2) Take a few random steps and render
+for _ in range(5):
+    a = random.choice([0,1,2,3])
+    obs, r, done, info = env.step(a)
+    env.render_ascii()
+    print("r:", r, "done:", done, "info:", info)
+    if done:
+        obs, info = env.reset()
+
+# 3) Pygame viewer (random policy)
+visualize_episode_pg(env, fps=8, max_steps=300, scale=32)
