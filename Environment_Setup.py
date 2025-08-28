@@ -1,5 +1,6 @@
 from __future__ import annotations
 import numpy as np
+import pygame as pg
 import random
 import yaml
 
@@ -190,8 +191,6 @@ class Environment:
         print('\n'.join(lines))
 
 
-
-import pygame as pg
 
 def draw_env_pg(screen, env, scale=32):
     colors = {
