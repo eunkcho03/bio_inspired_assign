@@ -4,6 +4,14 @@ seed: 42
 max_steps: 1000
 
 # Grid world settings
+#ascii_map: |
+#  XXXXXXXXXX
+#  XH..1..P.X
+#  X..X..W..X
+#  X..2..P..X
+#  X..T..D..X
+#  XXXXXXXXXX
+
 ascii_map: |
   XXXXXXXXXXXXX
   XH..........X

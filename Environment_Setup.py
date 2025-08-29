@@ -243,6 +243,7 @@ def visualize_episode_pg(env, policy_fn=None, fps=8, max_steps=500, scale=32):
     pg.quit()
 
 
+'''
 with open("config.yaml", "r") as f:
     cfg = yaml.safe_load(f)
     
@@ -264,3 +265,4 @@ for _ in range(5):
 
 # 3) Pygame viewer (random policy)
 visualize_episode_pg(env, fps=8, max_steps=300, scale=32)
+'''
