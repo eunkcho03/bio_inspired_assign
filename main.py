@@ -36,7 +36,8 @@ def main():
     
     trainer.train_dqn()
     trainer.save_snapshots("snapshots.pth")  
-    trainer.make_trajec(direct="plots")
+    trainer.make_trajec(direct="plots", visualize_pg=True) 
+    trainer.save_metrics_excel("plots/metrics.xlsx")
     plot_training_curves(trainer.plotting)
     print("hello")
     success_rate, avg_return = trainer.evaluate_policy(n_episodes=50)

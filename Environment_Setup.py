@@ -190,7 +190,7 @@ class Environment:
 
 
 
-def draw_env_pg(screen, env, scale=32):
+def draw_env_pg(screen, env, scale=32, path=None):
     colors = {
         T_emp:(230,230,230), T_wall:(30,30,30),   T_trap:(200,60,60),
         t_slide:(80,160,220), T_decoy:(200,120,60), T_portal:(130,70,200),
@@ -206,6 +206,23 @@ def draw_env_pg(screen, env, scale=32):
                 pg.draw.circle(screen, (255,215,0), (c*scale+scale//2, r*scale+scale//2), scale//5)
     dr, dc = env.depot_pos
     pg.draw.rect(screen, (60,180,90), (dc*scale, dr*scale, scale, scale), width=3)
+    
+    if path is not None and len(path) > 1:
+        for i in range(len(path)-1):
+            (r1, c1), (r2, c2) = path[i], path[i+1]
+            x1, y1 = c1*scale+scale//2, r1*scale+scale//2
+            x2, y2 = c2*scale+scale//2, r2*scale+scale//2
+
+            pg.draw.line(screen, (0,0,0), (x1, y1), (x2, y2), 2)
+
+            dx, dy = x2 - x1, y2 - y1
+            length = max((dx**2 + dy**2)**0.5, 1e-6)
+            ux, uy = dx/length, dy/length
+            size = scale//4 
+            left = (x2 - ux*size - uy*size/2, y2 - uy*size + ux*size/2)
+            right = (x2 - ux*size + uy*size/2, y2 - uy*size - ux*size/2)
+            pg.draw.polygon(screen, (0,0,0), [(x2, y2), left, right])
+    
     ar, ac = env.agent_pos
     pg.draw.circle(screen, (0,0,0), (ac*scale+scale//2, ar*scale+scale//2), scale//3)
 
@@ -233,6 +250,31 @@ def visualize_episode_pg(env, policy_fn=None, fps=8, max_steps=500, scale=32):
                 screen.fill((180,255,180)); pg.display.flip(); pg.time.delay(300)
             obs, info = env.reset()
         steps += 1
+    pg.quit()
+
+def visualize_snapshot_pg(env, path, scale=32, title="Trajectory", save_path=None):
+    pg.init()
+    screen = pg.display.set_mode((env.W*scale, env.H*scale))
+    pg.display.set_caption(title)
+    screen.fill((255,255,255))
+    draw_env_pg(screen, env, scale, path=path)
+    pg.display.flip()
+
+    running = True
+    while running:
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                running = False
+    if save_path is not None:
+        pg.image.save(screen, save_path)
+        print(f"Saved Pygame snapshot: {save_path}")
+
+    # wait until user closes window
+    running = True
+    while running:
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                running = False
     pg.quit()
 
 '''

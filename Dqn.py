@@ -9,6 +9,7 @@ from tqdm import tqdm
 from copy import deepcopy
 import pandas as pd
 import matplotlib.pyplot as plt
+from Environment_Setup import visualize_snapshot_pg
 up, right, down, left = 0, 1, 2, 3
 actions = [up, right, down, left]
 directions = {up: (0, -1), right: (1, 0), down: (0, 1), left: (-1, 0)}
@@ -141,12 +142,15 @@ class Training:
     def train_dqn(self):
         obs, _ = self.env.reset()
         ep_return, ep_len = 0.0, 0
+        ep_count = 0
+        ep_begin = 100
+        ep_mid = self.total_env_steps//2
+        saved_begin = False
+        saved_mid = False
 
         losses_win = cl.deque(maxlen=200)
         returns_win = cl.deque(maxlen=100)
         
-        early_step = 0.01 * self.total_env_steps
-        mid_step = self.total_env_steps // 2
 
         pbar = tqdm(range(1, self.total_env_steps + 1), desc="Train(DQN)", dynamic_ncols=True)
         for step in pbar:
@@ -183,7 +187,14 @@ class Training:
                 returns_win.append(ep_return)
                 obs, _ = self.env.reset()
                 ep_return, ep_len = 0.0, 0
-
+                ep_count += 1   
+                #print(ep_count)
+                if (ep_count == ep_begin):
+                    self.storage["begin"] = deepcopy(self.online.state_dict())
+                    #print('heyy')
+                    
+                if (ep_count == ep_mid):
+                    self.storage["mid_step"] = deepcopy(self.online.state_dict())
             if step % self.target_update_every == 0:
                 self.target.load_state_dict(self.online.state_dict())
 
@@ -201,11 +212,7 @@ class Training:
             #    self.plotting["step"].append(step)
             #    self.plotting["avg_return"].append(avg_ret1)
             #    self.plotting["success_rate"].append(succ1)
-            if step == early_step:
-                self.storage["begin"] = deepcopy(self.online.state_dict())
 
-            if step  == mid_step:
-                self.storage["mid_step"] = deepcopy(self.online.state_dict())
             avg_loss = (sum(losses_win) / len(losses_win)) if len(losses_win) else None
             avg_ret_recent = (sum(returns_win) / len(returns_win)) if len(returns_win) else 0.0
             pbar.set_postfix({
@@ -215,6 +222,7 @@ class Training:
                 "ret": f"{avg_ret_recent:.1f}",
             })
         self.storage["final"] = deepcopy(self.online.state_dict())
+        print(self.storage["begin"])
         return self.online, self.target
 
     def make_policy_fn(self, model=None):
@@ -236,7 +244,7 @@ class Training:
         model.eval()
         return self.make_policy_fn(model)
     
-    def make_trajec(self, direct="plots"):
+    def make_trajec(self, direct="plots", visualize_pg=False):
         os.makedirs(direct, exist_ok=True)
         for label in ("begin", "mid_step", "final"):
             pol = self.policy_state(self.storage[label])
@@ -253,29 +261,26 @@ class Training:
                     success = bool(info.get("success", False))
                     break
 
-            # print trajectory + path length
-            print(f"Trajectory ({label})")
-            print("Path:", path)
-            print("Total path length:", steps)
-            print(f"Return={R:.2f}, Steps={steps}, Success={success}")
+            print(f"\nTrajectory ({label}) | Return={R:.2f}, Steps={steps}, Success={success}")
 
-            # save plot
-            xs = [c for (r,c) in path]
-            ys = [r for (r,c) in path]
+            # save matplotlib plot
+            xs = [c for (r,c) in path]; ys = [r for (r,c) in path]
             plt.figure()
             plt.plot(xs, ys, marker='o', linewidth=1.5, markersize=3)
             plt.scatter([xs[0]], [ys[0]], marker='s', s=64, label="start")
             plt.scatter([xs[-1]], [ys[-1]], marker='*', s=96, label="end")
-            plt.legend()
-            plt.gca().invert_yaxis()
-            plt.xlabel("x (col)")
-            plt.ylabel("y (row)")
-            plt.grid(True)
-            plt.tight_layout()
+            plt.legend(); plt.gca().invert_yaxis()
+            plt.xlabel("x (col)"); plt.ylabel("y (row)")
+            plt.grid(True); plt.tight_layout()
             save_path = os.path.join(direct, f"trajectory_{label}.png")
-            plt.savefig(save_path, dpi=160)
-            plt.close()
-            print(f"Saved: {save_path}") 
+            plt.savefig(save_path, dpi=160); plt.close()
+            print(f"Saved plot: {save_path}")
+
+            # optionally open a pygame window
+            if visualize_pg:
+                save_path = os.path.join(direct, f"trajectory_{label}_pg.png")
+                visualize_snapshot_pg(self.env, path, title=f"Trajectory {label}", save_path=save_path)
+                
 
     def save_snapshots(self, filepath="snapshots.pth"):
         torch.save(self.storage, filepath)
@@ -285,4 +290,10 @@ class Training:
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"No snapshot file found at {filepath}")
         self.storage = torch.load(filepath, map_location=self.device)
-        print(f"Snapshots loaded from {filepath}")
+        print(f"Snapshots loaded from{filepath}")
+    
+    def save_metrics_excel(self, filepath="plots/metrics.xlsx"):
+        os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
+        df = pd.DataFrame(self.plotting)
+        df.to_excel(filepath, index=False)
+        print(f"Metrics saved to {filepath}")
