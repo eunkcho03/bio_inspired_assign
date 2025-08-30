@@ -47,7 +47,7 @@ class Environment:
         picks_all = set()
         portals = []
         depot_pos = (0, 0)
-        portal_map = {}              # <-- MOVED HERE (before the loops)
+        portal_map = {}             
 
         for r in range(H):
             for c in range(W):
@@ -223,19 +223,17 @@ def visualize_episode_pg(env, policy_fn=None, fps=8, max_steps=500, scale=32):
         a = policy_fn(env, obs) if policy_fn else random.choice([0,1,2,3])
         obs, r, done, info = env.step(a)
 
-        screen.fill((240,240,240))
+        screen.fill((255,255,255))
         draw_env_pg(screen, env, scale)
         pg.display.flip()
         clock.tick(fps)
 
         if done:
-            # brief flash on success
             if info.get("success"):
                 screen.fill((180,255,180)); pg.display.flip(); pg.time.delay(300)
             obs, info = env.reset()
         steps += 1
     pg.quit()
-
 
 '''
 with open("config.yaml", "r") as f:

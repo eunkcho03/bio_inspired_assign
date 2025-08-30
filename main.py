@@ -1,6 +1,7 @@
 import yaml
 from Environment_Setup import Environment, visualize_episode_pg
 from Dqn import Training
+from Evaluation import plot_training_curves
 
 env_cfg_path = "config.yaml"
 train_cfg_path = "train_config.yaml"
@@ -27,18 +28,19 @@ def main():
         target_update_every=train_cfg["target_update_every"],
         eval_every=train_cfg["eval_every"],
         seed=env_cfg["seed"] ,
-        save_path=train_cfg["save_path"],
         eps_start=eps_cfg["start"],
         eps_end=eps_cfg["end"],
         eps_fraction=eps_cfg["fraction"],
+        plot_every= train_cfg["plot_every"],
     )    
     
     trainer.train_dqn()
-    
+    trainer.save_snapshots("snapshots.pth")  
+    trainer.make_trajec(direct="plots")
+    plot_training_curves(trainer.plotting)
     print("hello")
     success_rate, avg_return = trainer.evaluate_policy(n_episodes=50)
-    print(f"FINAL RESULT → success_rate={success_rate:.2%}, avg_return={avg_return:.2f}")
-
+    print(f"FINAL RESULT: success_rate={success_rate:.2%}, avg_return={avg_return:.2f}")
     
     visualize_episode_pg(env, policy_fn=trainer.make_policy_fn(), fps=8, max_steps=300, scale=32)
 

@@ -1,11 +1,14 @@
-# ===================== DQN PART (drop-in) =====================
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import random
 import numpy as np
+import os
 import collections as cl
 from tqdm import tqdm
+from copy import deepcopy
+import pandas as pd
+import matplotlib.pyplot as plt
 up, right, down, left = 0, 1, 2, 3
 actions = [up, right, down, left]
 directions = {up: (0, -1), right: (1, 0), down: (0, 1), left: (-1, 0)}
@@ -64,7 +67,7 @@ class Replay_Buffer:
 
 
 class Training:
-    def __init__(self, env, total_env_steps, buffer_cap, batch_size, gamma, lr, min_buffer, target_update_every, eval_every, seed, save_path, eps_start, eps_end, eps_fraction):
+    def __init__(self, env, total_env_steps, buffer_cap, batch_size, gamma, lr, min_buffer, target_update_every, eval_every, seed, eps_start, eps_end, eps_fraction, plot_every):
         self.env = env
         self.total_env_steps = total_env_steps
         self.buffer_cap = buffer_cap
@@ -74,11 +77,12 @@ class Training:
         self.min_buffer = min_buffer
         self.target_update_every = target_update_every
         self.eval_every = eval_every
-        self.save_path = save_path
         self.eps_start = eps_start
         self.eps_end = eps_end
+        self.plot_every = plot_every
         self.decay_steps = int(max(1, eps_fraction * total_env_steps))
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.storage = {}
 
         if seed is not None:
             torch.manual_seed(seed); np.random.seed(seed); random.seed(seed)
@@ -90,7 +94,7 @@ class Training:
         self.target = CNN(C, H, W, nA).to(self.device)
         self.target.load_state_dict(self.online.state_dict())
         self.target.eval()
-
+        self.plotting = {"step": [], "avg_return" : [], "success_rate":[]}
         self.opt = optim.Adam(self.online.parameters(), lr=self.lr)
         self.rb = Replay_Buffer(self.buffer_cap, seed)
 
@@ -137,10 +141,12 @@ class Training:
     def train_dqn(self):
         obs, _ = self.env.reset()
         ep_return, ep_len = 0.0, 0
-        best_success = 0.0
 
         losses_win = cl.deque(maxlen=200)
         returns_win = cl.deque(maxlen=100)
+        
+        early_step = 0.01 * self.total_env_steps
+        mid_step = self.total_env_steps // 2
 
         pbar = tqdm(range(1, self.total_env_steps + 1), desc="Train(DQN)", dynamic_ncols=True)
         for step in pbar:
@@ -156,13 +162,13 @@ class Training:
             if len(self.rb) >= self.min_buffer:
                 obs_np, acts_np, rews_np, next_obs_np, dones_np = self.rb.sample(self.batch_size)
 
-                obs_b      = torch.from_numpy(obs_np).to(self.device)         # (B,C,H,W)
-                next_obs_b = torch.from_numpy(next_obs_np).to(self.device)    # (B,C,H,W)
-                acts_b     = torch.from_numpy(acts_np).to(self.device)        # (B,)
-                rews_b     = torch.from_numpy(rews_np).to(self.device)        # (B,)
-                dones_b    = torch.from_numpy(dones_np).to(self.device)       # (B,)
+                obs_b      = torch.from_numpy(obs_np).to(self.device)        
+                next_obs_b = torch.from_numpy(next_obs_np).to(self.device)   
+                acts_b     = torch.from_numpy(acts_np).to(self.device)       
+                rews_b     = torch.from_numpy(rews_np).to(self.device)      
+                dones_b    = torch.from_numpy(dones_np).to(self.device)      
 
-                q_pred = self.online.forwardpass(obs_b).gather(1, acts_b.view(-1,1)).squeeze(1)  # (B,)
+                q_pred = self.online.forwardpass(obs_b).gather(1, acts_b.view(-1,1)).squeeze(1)  
                 targets = self.compute_td_targets(next_obs_b, rews_b, dones_b)
 
                 loss = nn.functional.smooth_l1_loss(q_pred, targets)
@@ -183,13 +189,23 @@ class Training:
 
             if step % self.eval_every == 0:
                 succ, avg_ret = self.evaluate_policy(n_episodes=20)
+                self.plotting["step"].append(step)
+                self.plotting["avg_return"].append(avg_ret)
+                self.plotting["success_rate"].append(succ)
                 print(f"[step {step}] success={succ:.2%} avg_return={avg_ret:.2f} "
                       f"| buffer={len(self.rb)} | eps={eps:.3f}")
-                if succ > best_success:
-                    best_success = succ
-                    torch.save(self.online.state_dict(), self.save_path)
-                    print(f"  ↳ New best success, model saved to {self.save_path}")
+            
+         
+            #if step % self.plot_every == 0:
+            #    succ1, avg_ret1 = self.evaluate_policy(n_episodes=20)
+            #    self.plotting["step"].append(step)
+            #    self.plotting["avg_return"].append(avg_ret1)
+            #    self.plotting["success_rate"].append(succ1)
+            if step == early_step:
+                self.storage["begin"] = deepcopy(self.online.state_dict())
 
+            if step  == mid_step:
+                self.storage["mid_step"] = deepcopy(self.online.state_dict())
             avg_loss = (sum(losses_win) / len(losses_win)) if len(losses_win) else None
             avg_ret_recent = (sum(returns_win) / len(returns_win)) if len(returns_win) else 0.0
             pbar.set_postfix({
@@ -198,9 +214,8 @@ class Training:
                 "buf": len(self.rb),
                 "ret": f"{avg_ret_recent:.1f}",
             })
-
-        torch.save(self.online.state_dict(), self.save_path)
-        return self.online, self.target, self.save_path
+        self.storage["final"] = deepcopy(self.online.state_dict())
+        return self.online, self.target
 
     def make_policy_fn(self, model=None):
         model = model if model is not None else self.online
@@ -212,3 +227,62 @@ class Training:
                 q = model.forwardpass(obs_t)
                 return int(q.argmax(dim=1).item())
         return policy_fn
+
+    def policy_state(self, state_dict):
+        C, H, W=  self.env.observation_tensor().shape
+        nA = len(actions)
+        model = CNN(C, H, W, nA).to(self.device)
+        model.load_state_dict(state_dict)
+        model.eval()
+        return self.make_policy_fn(model)
+    
+    def make_trajec(self, direct="plots"):
+        os.makedirs(direct, exist_ok=True)
+        for label in ("begin", "mid_step", "final"):
+            pol = self.policy_state(self.storage[label])
+            obs, _ = self.env.reset()
+            path = [self.env.agent_pos]
+            R, steps, success = 0.0, 0, False
+            for _ in range(int(self.env.cfg["max_steps"])):
+                a = pol(self.env, obs)
+                obs, r, done, info = self.env.step(a)
+                R += r
+                steps += 1
+                path.append(self.env.agent_pos)
+                if done:
+                    success = bool(info.get("success", False))
+                    break
+
+            # print trajectory + path length
+            print(f"Trajectory ({label})")
+            print("Path:", path)
+            print("Total path length:", steps)
+            print(f"Return={R:.2f}, Steps={steps}, Success={success}")
+
+            # save plot
+            xs = [c for (r,c) in path]
+            ys = [r for (r,c) in path]
+            plt.figure()
+            plt.plot(xs, ys, marker='o', linewidth=1.5, markersize=3)
+            plt.scatter([xs[0]], [ys[0]], marker='s', s=64, label="start")
+            plt.scatter([xs[-1]], [ys[-1]], marker='*', s=96, label="end")
+            plt.legend()
+            plt.gca().invert_yaxis()
+            plt.xlabel("x (col)")
+            plt.ylabel("y (row)")
+            plt.grid(True)
+            plt.tight_layout()
+            save_path = os.path.join(direct, f"trajectory_{label}.png")
+            plt.savefig(save_path, dpi=160)
+            plt.close()
+            print(f"Saved: {save_path}") 
+
+    def save_snapshots(self, filepath="snapshots.pth"):
+        torch.save(self.storage, filepath)
+        print(f"Snapshots saved to {filepath}")
+
+    def load_snapshots(self, filepath="snapshots.pth"):
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"No snapshot file found at {filepath}")
+        self.storage = torch.load(filepath, map_location=self.device)
+        print(f"Snapshots loaded from {filepath}")
