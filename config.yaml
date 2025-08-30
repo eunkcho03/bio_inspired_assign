@@ -4,25 +4,25 @@ seed: 42
 max_steps: 1000
 
 # Grid world settings
-ascii_map: |
-  XXXXXXXXXX
-  XH..1..P.X
-  X..X..W..X
-  X..2..P..X
-  X..T..D..X
-  XXXXXXXXXX
-
 #ascii_map: |
 #  XXXXXXXXXX
-#  XH.......X
-#  X..1..W..X
-#  X....D...X
-#  X..P.....X
-#  X....2...X
-#  X.....T..X
-#  X..W...3.X
-#  X....4.P.X
+#  XH..1..P.X
+#  X..X..W..X
+#  X..2..P..X
+#  X..T..D..X
 #  XXXXXXXXXX
+
+ascii_map: |
+  XXXXXXXXXX
+  XH.......X
+  X..1..W..X
+  X....D...X
+  X..P.....X
+  X....2...X
+  X.....T..X
+  X..W...3.X
+  X....4.P.X
+  XXXXXXXXXX
 
 # X = wall, .= empty, H = home, W = slide, P = portal
 # T = trap, D = decoy, numbers = items to collect

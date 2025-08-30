@@ -107,88 +107,94 @@ class Environment:
         observation = np.stack(layers, axis=0)
         return observation
     
-    def step(self,action):
+    def step(self, action):
+        prev_pos = self.agent_pos
+
+        # propose move
         r, c = self.agent_pos
         dx, dy = directions[action]
-        nr = r + dy
-        nc = c + dx
-        if not (0<=nr<self.H and 0 <=nc <self.W) or self.grid[nr][nc] == T_wall:
+        nr, nc = r + dy, c + dx
+
+        # bounds/wall
+        if not (0 <= nr < self.H and 0 <= nc < self.W) or self.grid[nr][nc] == T_wall:
             nr, nc = r, c
         pos = (nr, nc)
-        
-        # In case of slide
-        if self.grid[pos[0]][pos[1]]== t_slide and self.rng.random() < float(self.cfg["p_stochastic"]):
+
+        # slide (stochastic)
+        if self.grid[pos[0]][pos[1]] == t_slide and self.rng.random() < float(self.cfg["p_stochastic"]):
             if action in (up, down):
                 side_choices = [left, right]
             else:
                 side_choices = [up, down]
-            slip_action = self.rng.choice(side_choices)
-            sdx, sdy = directions[slip_action]
+            sdx, sdy = directions[self.rng.choice(side_choices)]
             sr, sc = pos[0] + sdy, pos[1] + sdx
-            
-            if 0 <= sr <self.H and 0<= sc < self.W and self.grid[sr][sc] != T_wall:
+            if 0 <= sr < self.H and 0 <= sc < self.W and self.grid[sr][sc] != T_wall:
                 pos = (sr, sc)
-        
-        # In case of portal
+
+        # portal
         teleported = False
+        portal_src = None
+        portal_dst = None
         if self.grid[pos[0]][pos[1]] == T_portal:
+            portal_src = pos                 # entry portal tile
             dest = self.portal_map.get(pos)
             if dest is not None:
-                pos = dest
+                pos = dest                   # exit portal tile
+                portal_dst = dest
                 teleported = True
-    
+
+        # commit
         self.agent_pos = pos
-        
+
+        # rewards
         reward = float(self.cfg["c_step"])
         if teleported:
             reward += float(self.cfg["c_portal"])
-        
+
         if self.agent_pos in self.picks_remaining:
             self.picks_remaining.remove(self.agent_pos)
             reward += float(self.cfg["r_item"])
-        
+
         if self.grid[self.agent_pos[0]][self.agent_pos[1]] == T_decoy:
-            d = self.cfg["decoy"]
-            p = float(d["p_stochastic"])
-            if self.rng.random() < p:
-                reward += float(d["r_good"]) 
-            else:
-                reward += float(d["r_bad"])
-                
+            d = self.cfg["decoy"]; p = float(d["p_stochastic"])
+            reward += float(d["r_good"] if self.rng.random() < p else d["r_bad"])
+
         if self.grid[self.agent_pos[0]][self.agent_pos[1]] == T_trap:
             reward += float(self.cfg["r_trap"])
-            
+
+        # termination
         done = False
-        
-        success = (len(self.picks_remaining)==0 and self.agent_pos == self.depot_pos)
+        success = (len(self.picks_remaining) == 0 and self.agent_pos == self.depot_pos)
         if success:
             reward += float(self.cfg["complete_bonus"])
             done = True
+
         self.step_count += 1
         if self.step_count >= int(self.cfg["max_steps"]):
             done = True
-        
-        return self.observation_tensor(), reward, done, {"success": success, "teleported": teleported}
-    
-    def render_ascii(self):
-        chars = {
-            T_emp:'.', T_wall:'X', T_trap:'T', t_slide:'W',
-            T_decoy:'D', T_portal:'P', T_depot:'H', T_pickup:'.'
+
+        # info used for drawing/recording
+        info = {
+            "success": success,
+            "teleported": teleported,
+            "prev_pos": prev_pos,          # start of this step
+            "new_pos": self.agent_pos,     # end of this step
+            "portal_src": portal_src,      # None if no teleport
+            "portal_dst": portal_dst,      # None if no teleport
+            # convenience: which segment to draw for this step
+            "draw_from": portal_src if teleported else prev_pos,
+            "draw_to":   portal_dst if teleported else self.agent_pos,
+            "segment_is_portal": teleported,
         }
-        lines = []
-        for r in range(self.H):
-            row = []
-            for c in range(self.W):
-                ch = chars[self.grid[r][c]]
-                if (r, c) in self.picks_remaining: ch = '*'
-                if (r, c) == self.depot_pos:       ch = 'H'
-                row.append(ch)
-            lines.append(''.join(row))
-        ar, ac = self.agent_pos
-        ln = list(lines[ar]); ln[ac] = '@'; lines[ar] = ''.join(ln)
-        print('\n'.join(lines))
+        return self.observation_tensor(), reward, done, info
 
 
+def _is_adj(a, b):
+    (r1, c1), (r2, c2) = a, b
+    return abs(r1 - r2) + abs(c1 - c2) == 1
+
+def _is_portal_jump(env, a, b):
+    return (env.grid[a[0]][a[1]] == T_portal and env.portal_map.get(a) == b)
 
 def draw_env_pg(screen, env, scale=32, path=None):
     colors = {
@@ -204,12 +210,23 @@ def draw_env_pg(screen, env, scale=32, path=None):
             pg.draw.rect(screen, col, (c*scale, r*scale, scale, scale))
             if (r,c) in env.picks_remaining:
                 pg.draw.circle(screen, (255,215,0), (c*scale+scale//2, r*scale+scale//2), scale//5)
+
     dr, dc = env.depot_pos
     pg.draw.rect(screen, (60,180,90), (dc*scale, dr*scale, scale, scale), width=3)
-    
+
     if path is not None and len(path) > 1:
-        for i in range(len(path)-1):
-            (r1, c1), (r2, c2) = path[i], path[i+1]
+        for i in range(len(path) - 1):
+            p1 = path[i]
+            p2 = path[i + 1]
+            if p1 is None or p2 is None:
+                continue 
+
+            adj = _is_adj(p1, p2)
+            portal_jump = _is_portal_jump(env, p1, p2)
+            if not (adj or portal_jump):
+                continue  
+
+            (r1, c1), (r2, c2) = p1, p2
             x1, y1 = c1*scale+scale//2, r1*scale+scale//2
             x2, y2 = c2*scale+scale//2, r2*scale+scale//2
 
@@ -218,13 +235,14 @@ def draw_env_pg(screen, env, scale=32, path=None):
             dx, dy = x2 - x1, y2 - y1
             length = max((dx**2 + dy**2)**0.5, 1e-6)
             ux, uy = dx/length, dy/length
-            size = scale//4 
-            left = (x2 - ux*size - uy*size/2, y2 - uy*size + ux*size/2)
+            size = scale//4
+            left  = (x2 - ux*size - uy*size/2, y2 - uy*size + ux*size/2)
             right = (x2 - ux*size + uy*size/2, y2 - uy*size - ux*size/2)
             pg.draw.polygon(screen, (0,0,0), [(x2, y2), left, right])
-    
+
     ar, ac = env.agent_pos
     pg.draw.circle(screen, (0,0,0), (ac*scale+scale//2, ar*scale+scale//2), scale//3)
+
 
 def visualize_episode_pg(env, policy_fn=None, fps=8, max_steps=500, scale=32):
     pg.init()

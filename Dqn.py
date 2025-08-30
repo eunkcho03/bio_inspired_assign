@@ -159,8 +159,23 @@ class Training:
         for step in pbar:
             a, eps = self.select_action(obs, step)
             nxt, r, done, info = self.env.step(a)
+            
+            frm = info.get("draw_from", info.get("portal_src", self.env.agent_pos))
+            to  = info.get("draw_to",   info.get("portal_dst", self.env.agent_pos))
+            if cur_path[-1] != frm:
+                cur_path.append(frm)
+            if cur_path[-1] != to:
+                cur_path.append(to)
 
-            cur_path.append(self.env.agent_pos)
+            # record the trajectory properly
+            if info.get("teleported"):
+                if info["portal_src"] is not None:
+                    cur_path.append(info["portal_src"])
+                if info["portal_dst"] is not None:
+                    cur_path.append(info["portal_dst"])
+            else:
+                cur_path.append(self.env.agent_pos)
+
             if not mid_ep_saved and step >= mid_step:
                 mid_pending = True
 
