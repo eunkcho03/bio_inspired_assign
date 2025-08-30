@@ -143,10 +143,13 @@ class Training:
         obs, _ = self.env.reset()
         ep_return, ep_len = 0.0, 0
         ep_count = 0
-        ep_begin = 100
-        ep_mid = self.total_env_steps//2
-        saved_begin = False
-        saved_mid = False
+        
+        cur_path = [self.env.agent_pos]
+        first_ep_saved = False
+        mid_ep_saved = False
+        mid_step = self.total_env_steps // 2
+        mid_pending = False
+        saved_mid_model = False
 
         losses_win = cl.deque(maxlen=200)
         returns_win = cl.deque(maxlen=100)
@@ -157,10 +160,18 @@ class Training:
             a, eps = self.select_action(obs, step)
             nxt, r, done, info = self.env.step(a)
 
+            cur_path.append(self.env.agent_pos)
+            if not mid_ep_saved and step >= mid_step:
+                mid_pending = True
+
             self.rb.push(obs, a, r, nxt, done)
             ep_return += r
             ep_len += 1
             obs = nxt
+        
+            if not saved_mid_model and step >= mid_step:
+                self.storage["mid_step"] = deepcopy(self.online.state_dict())
+                saved_mid_model = True
 
             loss_val = None
             if len(self.rb) >= self.min_buffer:
@@ -185,16 +196,24 @@ class Training:
 
             if done:
                 returns_win.append(ep_return)
+                self.storage["final_episode_path"] = list(cur_path)
+                if not first_ep_saved and ep_count == 0:
+                    self.storage["first_episode_path"] = list(cur_path)
+                    first_ep_saved = True
+
+                if mid_pending and not mid_ep_saved:
+                    self.storage["mid_episode_path"] = list(cur_path)
+                    mid_ep_saved = True
+                    mid_pending = False
                 obs, _ = self.env.reset()
                 ep_return, ep_len = 0.0, 0
                 ep_count += 1   
+                cur_path = [self.env.agent_pos]
                 #print(ep_count)
-                if (ep_count == ep_begin):
-                    self.storage["begin"] = deepcopy(self.online.state_dict())
+
                     #print('heyy')
-                    
-                if (ep_count == ep_mid):
-                    self.storage["mid_step"] = deepcopy(self.online.state_dict())
+
+
             if step % self.target_update_every == 0:
                 self.target.load_state_dict(self.online.state_dict())
 
@@ -221,8 +240,8 @@ class Training:
                 "buf": len(self.rb),
                 "ret": f"{avg_ret_recent:.1f}",
             })
-        self.storage["final"] = deepcopy(self.online.state_dict())
-        print(self.storage["begin"])
+        if "final_episode_path" not in self.storage and len(cur_path) > 1:
+            self.storage["final_episode_path"] = list(cur_path)
         return self.online, self.target
 
     def make_policy_fn(self, model=None):
@@ -246,25 +265,18 @@ class Training:
     
     def make_trajec(self, direct="plots", visualize_pg=False):
         os.makedirs(direct, exist_ok=True)
-        for label in ("begin", "mid_step", "final"):
-            pol = self.policy_state(self.storage[label])
-            obs, _ = self.env.reset()
-            path = [self.env.agent_pos]
-            R, steps, success = 0.0, 0, False
-            for _ in range(int(self.env.cfg["max_steps"])):
-                a = pol(self.env, obs)
-                obs, r, done, info = self.env.step(a)
-                R += r
-                steps += 1
-                path.append(self.env.agent_pos)
-                if done:
-                    success = bool(info.get("success", False))
-                    break
 
-            print(f"\nTrajectory ({label}) | Return={R:.2f}, Steps={steps}, Success={success}")
+        for key, nice in [("first_episode_path", "first_episode"),
+                          ("mid_episode_path", "mid_episode"), 
+                          ("final_episode_path", "final_episode")]:
+            if key not in self.storage:
+                print(f"[make_trajec] '{key}' not found — did training finish those points?")
+                continue
 
-            # save matplotlib plot
-            xs = [c for (r,c) in path]; ys = [r for (r,c) in path]
+            path = self.storage[key]
+            xs = [c for (r, c) in path]
+            ys = [r for (r, c) in path]
+
             plt.figure()
             plt.plot(xs, ys, marker='o', linewidth=1.5, markersize=3)
             plt.scatter([xs[0]], [ys[0]], marker='s', s=64, label="start")
@@ -272,15 +284,15 @@ class Training:
             plt.legend(); plt.gca().invert_yaxis()
             plt.xlabel("x (col)"); plt.ylabel("y (row)")
             plt.grid(True); plt.tight_layout()
-            save_path = os.path.join(direct, f"trajectory_{label}.png")
+
+            save_path = os.path.join(direct, f"trajectory_{nice}.png")
             plt.savefig(save_path, dpi=160); plt.close()
             print(f"Saved plot: {save_path}")
 
-            # optionally open a pygame window
             if visualize_pg:
-                save_path = os.path.join(direct, f"trajectory_{label}_pg.png")
-                visualize_snapshot_pg(self.env, path, title=f"Trajectory {label}", save_path=save_path)
-                
+                save_path_pg = os.path.join(direct, f"trajectory_{nice}_pg.png")
+                visualize_snapshot_pg(self.env, path, title=f"Trajectory {nice}", save_path=save_path_pg)
+
 
     def save_snapshots(self, filepath="snapshots.pth"):
         torch.save(self.storage, filepath)
