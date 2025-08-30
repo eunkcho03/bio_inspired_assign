@@ -5,7 +5,7 @@ gamma: 0.99
 lr: 0.001
 min_buffer: 2000
 target_update_every: 1000
-eval_every: 2000
+eval_every: 100
 seed: null
 plot_every: 2500
 eps:

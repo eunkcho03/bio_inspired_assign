@@ -278,16 +278,10 @@ def visualize_snapshot_pg(env, path, scale=32, title="Trajectory", save_path=Non
     draw_env_pg(screen, env, scale, path=path)
     pg.display.flip()
 
-    running = True
-    while running:
-        for event in pg.event.get():
-            if event.type == pg.QUIT:
-                running = False
     if save_path is not None:
         pg.image.save(screen, save_path)
         print(f"Saved Pygame snapshot: {save_path}")
 
-    # wait until user closes window
     running = True
     while running:
         for event in pg.event.get():

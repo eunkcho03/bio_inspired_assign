@@ -1,6 +1,6 @@
 import yaml
-from Environment_Setup import Environment, visualize_episode_pg
-from Dqn import Training
+from Environment_Setup import Environment, visualize_episode_pg, visualize_snapshot_pg
+from Dqn import Training, record_greedy_episode
 from Evaluation import plot_training_curves
 
 env_cfg_path = "config.yaml"
@@ -35,15 +35,15 @@ def main():
     )    
     
     trainer.train_dqn()
-    trainer.save_snapshots("snapshots.pth")  
-    trainer.make_trajec(direct="plots", visualize_pg=True) 
+    trainer.save_snapshots("snapshots.pth")
+    trainer.make_trajec(direct="plots", visualize_pg=True)
     trainer.save_metrics_excel("plots/metrics.xlsx")
     plot_training_curves(trainer.plotting)
-    print("hello")
-    success_rate, avg_return = trainer.evaluate_policy(n_episodes=50)
-    print(f"FINAL RESULT: success_rate={success_rate:.2%}, avg_return={avg_return:.2f}")
-    
-    visualize_episode_pg(env, policy_fn=trainer.make_policy_fn(), fps=8, max_steps=300, scale=32)
+    greedy_policy = trainer.make_policy_fn() 
+    final_path = record_greedy_episode(env, greedy_policy)
+    visualize_snapshot_pg(env, final_path,title="Greedy Policy (Final)",save_path="plots/greedy_final_pg.png")
+    success_rate, avg_return, avg_steps, best_steps = trainer.evaluate_policy(n_episodes=50)
+    print(f"FINAL RESULT: success_rate={success_rate:.2%}, avg_return={avg_return:.2f}, avg_steps= {avg_steps:.2f}, best_steps={best_steps} ")
 
 if __name__ == "__main__":
     main()

@@ -123,22 +123,31 @@ class Training:
     @torch.no_grad()
     def evaluate_policy(self, n_episodes=10):
         self.online.eval()
-        total_return, successes = 0.0, 0
+        total_return, successes, total_steps = 0.0, 0, 0
+        best_steps = None
+
         for _ in range(n_episodes):
             obs, _ = self.env.reset()
-            ep_ret = 0.0
+            ep_ret, steps = 0.0, 0
             for _ in range(int(self.env.cfg["max_steps"])):
                 obs_t = torch.from_numpy(obs).unsqueeze(0).to(self.device)
                 q = self.online.forwardpass(obs_t)
                 a = int(q.argmax(dim=1).item())
                 obs, r, done, info = self.env.step(a)
                 ep_ret += r
+                steps += 1
                 if done:
-                    if info.get("success", False): successes += 1
+                    if info.get("success", False):
+                        successes += 1
+                        if best_steps is None or steps < best_steps:
+                            best_steps = steps  
                     break
             total_return += ep_ret
-        return successes / n_episodes, total_return / n_episodes
-
+            total_steps += steps
+        avg_return = total_return / n_episodes
+        avg_steps = total_steps / n_episodes
+        success_rate = successes / n_episodes
+        return success_rate, avg_return, avg_steps, best_steps
     def train_dqn(self):
         obs, _ = self.env.reset()
         ep_return, ep_len = 0.0, 0
@@ -160,21 +169,13 @@ class Training:
             a, eps = self.select_action(obs, step)
             nxt, r, done, info = self.env.step(a)
             
-            frm = info.get("draw_from", info.get("portal_src", self.env.agent_pos))
-            to  = info.get("draw_to",   info.get("portal_dst", self.env.agent_pos))
-            if cur_path[-1] != frm:
-                cur_path.append(frm)
-            if cur_path[-1] != to:
-                cur_path.append(to)
-
-            # record the trajectory properly
-            if info.get("teleported"):
-                if info["portal_src"] is not None:
+            if info.get("segment_is_portal"):
+                if not cur_path or cur_path[-1] != info["portal_src"]:
                     cur_path.append(info["portal_src"])
-                if info["portal_dst"] is not None:
-                    cur_path.append(info["portal_dst"])
+                cur_path.append(info["portal_dst"])
             else:
-                cur_path.append(self.env.agent_pos)
+                if not cur_path or cur_path[-1] != info["new_pos"]:
+                    cur_path.append(info["new_pos"])
 
             if not mid_ep_saved and step >= mid_step:
                 mid_pending = True
@@ -233,12 +234,12 @@ class Training:
                 self.target.load_state_dict(self.online.state_dict())
 
             if step % self.eval_every == 0:
-                succ, avg_ret = self.evaluate_policy(n_episodes=20)
+                succ, avg_ret, avg_steps, best_steps = self.evaluate_policy(n_episodes=20)
                 self.plotting["step"].append(step)
                 self.plotting["avg_return"].append(avg_ret)
                 self.plotting["success_rate"].append(succ)
-                print(f"[step {step}] success={succ:.2%} avg_return={avg_ret:.2f} "
-                      f"| buffer={len(self.rb)} | eps={eps:.3f}")
+                #print(f"[step {step}] success={succ:.2%} avg_return={avg_ret:.2f} "
+                #      f"| buffer={len(self.rb)} | eps={eps:.3f}")
             
          
             #if step % self.plot_every == 0:
@@ -324,3 +325,23 @@ class Training:
         df = pd.DataFrame(self.plotting)
         df.to_excel(filepath, index=False)
         print(f"Metrics saved to {filepath}")
+
+def record_greedy_episode(env, policy_fn, max_steps=None):
+    obs, _ = env.reset()
+    path = [env.agent_pos]
+    max_steps = max_steps or int(env.cfg["max_steps"])
+    for _ in range(max_steps):
+        a = policy_fn(env, obs) 
+        obs, r, done, info = env.step(a)
+
+        if info.get("segment_is_portal"):
+            if not path or path[-1] != info["portal_src"]:
+                path.append(info["portal_src"])
+            path.append(info["portal_dst"])
+        else:
+            if not path or path[-1] != info["new_pos"]:
+                path.append(info["new_pos"])
+
+        if done:
+            break
+    return path
