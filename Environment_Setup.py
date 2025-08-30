@@ -171,7 +171,6 @@ class Environment:
         return self.observation_tensor(), reward, done, {"success": success, "teleported": teleported}
     
     def render_ascii(self):
-        # Characters per tile
         chars = {
             T_emp:'.', T_wall:'X', T_trap:'T', t_slide:'W',
             T_decoy:'D', T_portal:'P', T_depot:'H', T_pickup:'.'
@@ -185,7 +184,6 @@ class Environment:
                 if (r, c) == self.depot_pos:       ch = 'H'
                 row.append(ch)
             lines.append(''.join(row))
-        # overlay agent
         ar, ac = self.agent_pos
         ln = list(lines[ar]); ln[ac] = '@'; lines[ar] = ''.join(ln)
         print('\n'.join(lines))
@@ -204,18 +202,14 @@ def draw_env_pg(screen, env, scale=32):
             tile = env.grid[r][c]
             col = colors.get(tile, (200,200,200))
             pg.draw.rect(screen, col, (c*scale, r*scale, scale, scale))
-            # picks overlay
             if (r,c) in env.picks_remaining:
                 pg.draw.circle(screen, (255,215,0), (c*scale+scale//2, r*scale+scale//2), scale//5)
-    # depot marker
     dr, dc = env.depot_pos
     pg.draw.rect(screen, (60,180,90), (dc*scale, dr*scale, scale, scale), width=3)
-    # agent
     ar, ac = env.agent_pos
     pg.draw.circle(screen, (0,0,0), (ac*scale+scale//2, ar*scale+scale//2), scale//3)
 
 def visualize_episode_pg(env, policy_fn=None, fps=8, max_steps=500, scale=32):
-    """policy_fn(env, obs) -> action (0..3). If None, random actions."""
     pg.init()
     screen = pg.display.set_mode((env.W*scale, env.H*scale))
     clock = pg.time.Clock()
