@@ -42,8 +42,8 @@ def main():
     greedy_policy = trainer.make_policy_fn() 
     final_path = record_greedy_episode(env, greedy_policy)
     visualize_snapshot_pg(env, final_path,title="Greedy Policy (Final)",save_path="plots/greedy_final_pg.png")
-    success_rate, avg_return, avg_steps, best_steps = trainer.evaluate_policy(n_episodes=50)
-    print(f"FINAL RESULT: success_rate={success_rate:.2%}, avg_return={avg_return:.2f}, avg_steps= {avg_steps:.2f}, best_steps={best_steps} ")
+    success_rate, avg_return, avg_steps, best_steps, avg_path_length = trainer.evaluate_policy(n_episodes=50)
+    print(f"FINAL RESULT: success_rate={success_rate:.2%}, avg_return={avg_return:.2f}, avg_steps= {avg_steps:.2f}, best_steps={best_steps}, average_path_length {avg_path_length} ")
 
 if __name__ == "__main__":
     main()

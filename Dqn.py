@@ -125,15 +125,18 @@ class Training:
         self.online.eval()
         total_return, successes, total_steps = 0.0, 0, 0
         best_steps = None
+        total_path_length = 0
 
         for _ in range(n_episodes):
             obs, _ = self.env.reset()
+            path = [self.env.agent_pos]
             ep_ret, steps = 0.0, 0
             for _ in range(int(self.env.cfg["max_steps"])):
                 obs_t = torch.from_numpy(obs).unsqueeze(0).to(self.device)
                 q = self.online.forwardpass(obs_t)
                 a = int(q.argmax(dim=1).item())
                 obs, r, done, info = self.env.step(a)
+                path.append(self.env.agent_pos)
                 ep_ret += r
                 steps += 1
                 if done:
@@ -144,10 +147,12 @@ class Training:
                     break
             total_return += ep_ret
             total_steps += steps
+            total_path_length += len(path) - 1
         avg_return = total_return / n_episodes
         avg_steps = total_steps / n_episodes
         success_rate = successes / n_episodes
-        return success_rate, avg_return, avg_steps, best_steps
+        avg_path_len = total_path_length / n_episodes
+        return success_rate, avg_return, avg_steps, best_steps, avg_path_len
     def train_dqn(self):
         obs, _ = self.env.reset()
         ep_return, ep_len = 0.0, 0
@@ -234,12 +239,13 @@ class Training:
                 self.target.load_state_dict(self.online.state_dict())
 
             if step % self.eval_every == 0:
-                succ, avg_ret, avg_steps, best_steps = self.evaluate_policy(n_episodes=20)
+                succ, avg_ret, avg_steps, best_steps, avg_path_length = self.evaluate_policy(n_episodes=20)
                 self.plotting["step"].append(step)
                 self.plotting["avg_return"].append(avg_ret)
                 self.plotting["success_rate"].append(succ)
-                #print(f"[step {step}] success={succ:.2%} avg_return={avg_ret:.2f} "
-                #      f"| buffer={len(self.rb)} | eps={eps:.3f}")
+                print(f"[step {step}] success={succ:.2%} avg_return={avg_ret:.2f} "
+                      f"| buffer={len(self.rb)} | eps={eps:.3f}")
+                print(f'[avg_steps] {avg_steps} [avg_path_length] {avg_path_length}')
             
          
             #if step % self.plot_every == 0:
