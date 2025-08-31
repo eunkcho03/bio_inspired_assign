@@ -1,0 +1,14 @@
+total_env_steps: 50000
+buffer_cap: 20000
+batch_size: 64
+gamma: 0.99
+lr: 0.001
+min_buffer: 2000
+target_update_every: 1000
+eval_every: 500
+seed: null
+plot_every: 500
+eps:
+  start: 1.0
+  end: 0.05
+  fraction: 0.6

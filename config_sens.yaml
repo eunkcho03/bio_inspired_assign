@@ -1,0 +1,43 @@
+# Configuration file for the warehouse environment
+env_name: warehouse
+seed: 42
+max_steps: 1000
+
+# Grid world settings
+#ascii_map: |
+#  XXXXXXXXXX
+#  XH..1..P.X
+#  X..X..W..X
+#  X..2..P..X
+#  X..T..D..X
+#  XXXXXXXXXX
+
+ascii_map: |
+  XXXXXXXXXX
+  XH.......X
+  X..1..W..X
+  X....D...X
+  X..P.....X
+  X....2...X
+  X.....T..X
+  X..W...3.X
+  X....4.P.X
+  XXXXXXXXXX
+
+# X = wall, .= empty, H = home, W = slide, P = portal
+# T = trap, D = decoy, numbers = items to collect
+# portal must be in pairs!!!
+
+# Reward settings
+c_step: -0.04
+r_trap: -1.0
+c_portal: -0.1
+complete_bonus: 1.0
+r_item: 0.5
+
+# Stochasticity settings
+p_stochastic: 0.3
+decoy:
+  p_stochastic: 0.1
+  r_good: 0.8
+  r_bad: -0.5

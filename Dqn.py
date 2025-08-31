@@ -243,9 +243,9 @@ class Training:
                 self.plotting["step"].append(step)
                 self.plotting["avg_return"].append(avg_ret)
                 self.plotting["success_rate"].append(succ)
-                print(f"[step {step}] success={succ:.2%} avg_return={avg_ret:.2f} "
-                      f"| buffer={len(self.rb)} | eps={eps:.3f}")
-                print(f'[avg_steps] {avg_steps} [avg_path_length] {avg_path_length}')
+                #print(f"[step {step}] success={succ:.2%} avg_return={avg_ret:.2f} "
+                #      f"| buffer={len(self.rb)} | eps={eps:.3f}")
+                #print(f'[avg_steps] {avg_steps} [avg_path_length] {avg_path_length}')
             
          
             #if step % self.plot_every == 0:
